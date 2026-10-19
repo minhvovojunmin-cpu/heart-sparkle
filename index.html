@@ -22,10 +22,18 @@
   #sound { right: 14px; }
   #replay { right: 62px; display: none; }
   #sound:hover, #replay:hover { opacity: .9; }
+  #logo {
+    position: fixed; top: 14px; left: 14px; z-index: 5;
+    width: clamp(54px, 8vw, 78px); height: auto;
+    border-radius: 12px; background: #fff; padding: 3px;
+    box-shadow: 0 0 14px rgba(255, 120, 170, .35);
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<img id="logo" src="logo-bk.png" alt="Logo Đại học Bách Khoa TP.HCM">
 <button id="replay" aria-label="Phát lại" title="Phát lại">↻</button>
 <button id="sound" aria-label="Bật tắt tiếng tim đập">🔇</button>
 
@@ -92,17 +100,17 @@ function resize() {
 }
 resize();
 
-/* ============================ SPRITES (HỒNG & ĐỎ DỊU MẮT, KHÔNG CHÁY SÁNG) ============================ */
+/* ============================ SPRITES (HỒNG & ĐỎ TƯƠI SÁNG, NỔI BẬT) ============================ */
 const PALETTE = [
-  [235, 65, 130],   // 0 hồng sen trầm
-  [240, 110, 168],  // 1 hồng đào dịu
-  [242, 155, 192],  // 2 hồng phấn
-  [225, 32, 98],    // 3 hồng đỏ đậm
-  [238, 130, 182],  // 4 hồng kẹo
-  [235, 88, 162],   // 5 hồng cánh sen
-  [235, 42, 72],    // 6 đỏ tươi
-  [245, 175, 208],  // 7 hồng nhạt
-  [205, 22, 68]     // 8 đỏ hồng ruby
+  [255, 75, 145],   // 0 hồng sen tươi
+  [255, 125, 185],  // 1 hồng đào sáng
+  [255, 175, 212],  // 2 hồng phấn sáng
+  [255, 42, 112],   // 3 hồng đỏ rực
+  [255, 148, 202],  // 4 hồng kẹo ngọt
+  [255, 102, 182],  // 5 hồng cánh sen
+  [255, 52, 85],    // 6 đỏ hồng tươi
+  [255, 205, 230],  // 7 hồng ánh sáng
+  [240, 28, 82]     // 8 đỏ hồng ruby
 ];
 const lite = (rgb, k) => rgb.map(v => Math.round(v + (255 - v) * k)).join(',');
 
@@ -110,9 +118,9 @@ function glowSprite(rgb) {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, `rgba(${lite(rgb, 0.2)},0.75)`);
-  gr.addColorStop(0.14, `rgba(${rgb},0.65)`);
-  gr.addColorStop(0.34, `rgba(${rgb},0.12)`);
+  gr.addColorStop(0, `rgba(${lite(rgb, 0.35)},0.92)`);
+  gr.addColorStop(0.16, `rgba(${rgb},0.85)`);
+  gr.addColorStop(0.38, `rgba(${rgb},0.2)`);
   gr.addColorStop(1, `rgba(${rgb},0)`);
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
   return c;
@@ -120,20 +128,20 @@ function glowSprite(rgb) {
 function starSprite(rgb) {
   const N = 96, c = document.createElement('canvas'); c.width = c.height = N;
   const g = c.getContext('2d');
-  const core = lite(rgb, 0.22), ray = lite(rgb, 0.18);
+  const core = lite(rgb, 0.38), ray = lite(rgb, 0.3);
   const gr = g.createRadialGradient(N/2, N/2, 0, N/2, N/2, N/2);
-  gr.addColorStop(0, `rgba(${core},0.78)`);
-  gr.addColorStop(0.11, `rgba(${core},0.58)`);
-  gr.addColorStop(0.25, `rgba(${rgb},0.34)`);
-  gr.addColorStop(0.55, `rgba(${rgb},0.06)`);
+  gr.addColorStop(0, `rgba(${core},0.94)`);
+  gr.addColorStop(0.12, `rgba(${core},0.75)`);
+  gr.addColorStop(0.28, `rgba(${rgb},0.48)`);
+  gr.addColorStop(0.62, `rgba(${rgb},0.1)`);
   gr.addColorStop(1, `rgba(${rgb},0)`);
   g.fillStyle = gr; g.fillRect(0, 0, N, N);
   for (let k = 0; k < 4; k++) {
     g.save(); g.translate(N/2, N/2); g.rotate(k * Math.PI / 4);
-    const len = k % 2 ? N * 0.28 : N * 0.46, w = k % 2 ? 1.4 : 2.5;
+    const len = k % 2 ? N * 0.3 : N * 0.48, w = k % 2 ? 1.5 : 2.8;
     const lg = g.createLinearGradient(0, -len, 0, len);
     lg.addColorStop(0, `rgba(${ray},0)`);
-    lg.addColorStop(0.5, `rgba(${ray},0.72)`);
+    lg.addColorStop(0.5, `rgba(${ray},0.88)`);
     lg.addColorStop(1, `rgba(${ray},0)`);
     g.fillStyle = lg;
     g.beginPath();
@@ -291,10 +299,10 @@ function buildParticles() {
       ttx: CX, tty: CY, inText: true,
       x: CX + Math.cos(ang) * dist, y: CY + Math.sin(ang) * dist,
       vx: 0, vy: 0,
-      size: star ? 7 + Math.random() * 10 : (edge ? 1.8 : 1.45) + Math.random() * 2.2,
+      size: star ? 7.5 + Math.random() * 11 : (edge ? 1.95 : 1.55) + Math.random() * 2.45,
       star, ci,
       phase: Math.random() * 6.28, speed: star ? 1.2 + Math.random() * 2.6 : 1.5 + Math.random() * 3.5,
-      base: star ? 0.52 + Math.random() * 0.22 : edge ? 0.72 : 0.36 + Math.random() * 0.3,
+      base: star ? 0.68 + Math.random() * 0.24 : edge ? 0.86 : 0.48 + Math.random() * 0.36,
       delay: Math.random() * 0.45,
       textDelay: Math.random() * 0.25,
       fx: Math.random() * 6.28, fy: Math.random() * 6.28
@@ -533,28 +541,28 @@ function frame(now) {
     ctx.drawImage(BOKEH, b.x - b.size / 2, b.y - b.size / 2, b.size, b.size);
   }
 
-  // Quầng sáng mờ sau trái tim / sau dòng chữ (đã giảm độ rực để quay không bị lóa)
+  // Quầng sáng mờ sau trái tim / sau dòng chữ
   const gr = ctx.createRadialGradient(hCX, hCY, 0, hCX, hCY, S * 25);
   const ga = exploded
-    ? 0.045 + 0.02 * Math.sin(time * 2)
-    : 0.04 + 0.07 * pulse + charge * 0.08;
-  gr.addColorStop(0, `rgba(235,40,105,${ga})`);
-  gr.addColorStop(0.55, `rgba(215,25,85,${ga * 0.3})`);
+    ? 0.06 + 0.025 * Math.sin(time * 2)
+    : 0.055 + 0.095 * pulse + charge * 0.12;
+  gr.addColorStop(0, `rgba(255,50,120,${ga})`);
+  gr.addColorStop(0.55, `rgba(235,30,100,${ga * 0.32})`);
   gr.addColorStop(1, 'rgba(200,20,80,0)');
   ctx.globalAlpha = 1;
   ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
 
-  // Ánh sáng bên trong tim (rất dịu để tránh cháy sáng ở tâm tim)
+  // Ánh sáng hồng bên trong tim
   if (!exploded) {
     ctx.save();
     heartPath(hCX, hCY, S * heartScale);
     ctx.clip();
     const ig = ctx.createRadialGradient(hCX, hCY - S * 1.5, 0, hCX, hCY, S * 17 * heartScale);
     const ia = Math.min(1, Math.max(0, time - 0.4) / 0.8);
-    const boost = 1 + charge * 0.85;
-    ig.addColorStop(0, `rgba(240,115,170,${Math.min(0.18, (0.045 + 0.045 * pulse) * ia * boost)})`);
-    ig.addColorStop(0.45, `rgba(225,55,125,${Math.min(0.12, (0.028 + 0.028 * pulse) * ia * boost)})`);
-    ig.addColorStop(1, `rgba(200,25,85,${Math.min(0.07, (0.015 + 0.015 * pulse) * ia * boost)})`);
+    const boost = 1 + charge * 1.1;
+    ig.addColorStop(0, `rgba(255,135,190,${Math.min(0.26, (0.075 + 0.075 * pulse) * ia * boost)})`);
+    ig.addColorStop(0.45, `rgba(245,70,145,${Math.min(0.18, (0.045 + 0.045 * pulse) * ia * boost)})`);
+    ig.addColorStop(1, `rgba(215,30,95,${Math.min(0.1, (0.022 + 0.022 * pulse) * ia * boost)})`);
     ctx.fillStyle = ig; ctx.fillRect(0, 0, W, H);
     ctx.restore();
   }
@@ -578,9 +586,9 @@ function frame(now) {
   for (const a of ambient) {
     a.y -= a.vy * dt; a.x += Math.sin(time * 0.8 + a.sway) * 10 * dt;
     if (a.y < -30) Object.assign(a, newAmbient(false));
-    ctx.globalAlpha = (0.16 + 0.2 * Math.sin(time * 2 + a.ph)) * Math.min(1, time / 1.0);
+    ctx.globalAlpha = (0.18 + 0.22 * Math.sin(time * 2 + a.ph)) * Math.min(1, time / 1.0);
     const sp = a.heart ? HEARTS[a.ci] : STARS[a.ci];
-    const sz = a.heart ? a.size * 0.8 : a.size * 1.4;
+    const sz = a.heart ? a.size * 0.8 : a.size * 1.45;
     ctx.drawImage(sp, a.x - sz / 2, a.y - sz / 2, sz, sz);
   }
 
@@ -589,9 +597,9 @@ function frame(now) {
     const r = rings[i];
     r.r += dt * (1.1 + charge * 0.7); r.a -= dt * 0.48;
     if (r.a <= 0) { rings.splice(i, 1); continue; }
-    ctx.globalAlpha = r.a * 0.6;
-    ctx.strokeStyle = '#f05a95'; ctx.lineWidth = 1.4;
-    ctx.shadowColor = '#e02465'; ctx.shadowBlur = 8;
+    ctx.globalAlpha = r.a * 0.72;
+    ctx.strokeStyle = '#ff6fa8'; ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#ff2e74'; ctx.shadowBlur = 10;
     heartPath(hCX, hCY, S * (heartScale + r.r * 0.9));
     ctx.stroke();
     ctx.shadowBlur = 0;
@@ -604,9 +612,9 @@ function frame(now) {
     sw.a -= dt * 1.1;
     if (sw.a <= 0) { shockwaves.splice(i, 1); continue; }
     ctx.globalAlpha = sw.a;
-    ctx.strokeStyle = '#f04e8c';
+    ctx.strokeStyle = '#ff5c9e';
     ctx.lineWidth = sw.w;
-    ctx.shadowColor = '#d91858'; ctx.shadowBlur = 12;
+    ctx.shadowColor = '#ff1e62'; ctx.shadowBlur = 14;
     ctx.beginPath();
     ctx.arc(CX, CY, sw.r, 0, Math.PI * 2);
     ctx.stroke();
@@ -679,27 +687,27 @@ function frame(now) {
 
     q.x += q.vx * dt; q.y += q.vy * dt;
 
-    // Độ sáng dịu mắt, lên màu hồng/đỏ rõ khi quay video mà không bị lóa trắng
+    // Độ sáng hồng tươi tắn, nổi bật rõ nét
     const tw = 0.5 + 0.5 * Math.sin(time * q.speed + q.phase);
-    const chargeBoost = !exploded ? charge * 0.18 : 0;
+    const chargeBoost = !exploded ? charge * 0.25 : 0;
     const textSettled = inTextPhase && q.inText ? Math.min(1, Math.max(0, (textElapsed - q.textDelay) / 0.8)) : 0;
 
     if (q.star) {
       const k = tw * tw;
-      let a = q.base * (0.32 + 0.44 * k) * (0.78 + 0.28 * pl + chargeBoost) * Math.min(1, age / 0.35);
-      if (inTextPhase && !q.inText) a *= 0.5;
-      if (a > 0.85) a = 0.85;
-      const scaleText = 1 - textSettled * 0.34;
-      const sz = q.size * (0.68 + 0.38 * k + 0.2 * pl) * 2.15 * scaleText;
+      let a = q.base * (0.4 + 0.5 * k) * (0.85 + 0.36 * pl + chargeBoost) * Math.min(1, age / 0.35);
+      if (inTextPhase && !q.inText) a *= 0.55;
+      if (a > 0.96) a = 0.96;
+      const scaleText = 1 - textSettled * 0.32;
+      const sz = q.size * (0.72 + 0.42 * k + 0.24 * pl) * 2.3 * scaleText;
       ctx.globalAlpha = a;
       ctx.drawImage(STARS[q.ci], q.x - sz / 2, q.y - sz / 2, sz, sz);
     } else {
-      let a = q.base * (0.32 + 0.42 * tw) * (0.72 + 0.3 * pl + chargeBoost) * Math.min(1, age / 0.35);
-      if (textSettled > 0) a = Math.min(0.88, a * (1 + textSettled * 0.42));
-      else if (inTextPhase && !q.inText) a *= 0.42;
-      if (a > 0.88) a = 0.88;
-      const scaleText = 1 - textSettled * 0.2;
-      const sz = q.size * (1 + 0.24 * pl) * 2.0 * scaleText;
+      let a = q.base * (0.4 + 0.48 * tw) * (0.8 + 0.38 * pl + chargeBoost) * Math.min(1, age / 0.35);
+      if (textSettled > 0) a = Math.min(0.96, a * (1 + textSettled * 0.45));
+      else if (inTextPhase && !q.inText) a *= 0.48;
+      if (a > 0.96) a = 0.96;
+      const scaleText = 1 - textSettled * 0.18;
+      const sz = q.size * (1 + 0.28 * pl) * 2.18 * scaleText;
       ctx.globalAlpha = a;
       ctx.drawImage(GLOWS[q.ci], q.x - sz / 2, q.y - sz / 2, sz, sz);
     }
