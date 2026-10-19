@@ -13,54 +13,31 @@
     user-select: none;
   }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  #sound, #replay {
-    position: fixed; top: 14px; width: 40px; height: 40px; padding: 0;
+  #sound {
+    position: fixed; right: 14px; top: 14px; width: 40px; height: 40px; padding: 0;
     font-size: 1.05rem; cursor: pointer; border-radius: 50%; color: #fff;
     background: rgba(255,255,255,.06); border: 1px solid rgba(255,120,170,.25);
     opacity: .35; transition: opacity .3s; z-index: 5;
   }
-  #sound { right: 14px; }
-  #replay { right: 62px; display: none; }
-  #sound:hover, #replay:hover { opacity: .9; }
-  #logo {
-    position: fixed; top: 14px; left: 14px; z-index: 5;
-    width: clamp(54px, 8vw, 78px); height: auto;
-    border-radius: 12px; background: #fff; padding: 3px;
-    box-shadow: 0 0 14px rgba(255, 120, 170, .35);
-    pointer-events: none;
-  }
+  #sound:hover { opacity: .9; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<img id="logo" src="logo-bk.png" alt="Logo Đại học Bách Khoa TP.HCM">
-<button id="replay" aria-label="Phát lại" title="Phát lại">↻</button>
 <button id="sound" aria-label="Bật tắt tiếng tim đập">🔇</button>
 
 <script>
 const qs = new URLSearchParams(location.search);
-const BPM = Number(qs.get('bpm')) || 105;
-const PARTICLES = 5200;
-
-/* ============================ TIMELINE (TỔNG 5 GIÂY) ============================
-   1. 0.0s -> 0.8s : các hạt nhanh chóng tụ thành trái tim
-   2. 0.8s -> 2.3s : trái tim đập 2-3 nhịp rõ ràng
-   3. 2.3s -> 3.2s : nhịp cuối dồn nén — tim phồng to và rung lắc
-   4. 3.2s         : NỔ TUNG thành hàng ngàn hạt hồng/đỏ bay lơ lửng
-   5. 3.9s -> 5.0s : các hạt hút nhanh về xếp hoàn chỉnh chữ:
-                     "system overloaded by .... YOU"
-   ============================================================================== */
-const T_GATHER_END   = 0.8;
-const T_CHARGE_START = 2.3;
-const T_EXPLODE      = 3.2;
-const T_TEXT_START   = 3.9;
+const BPM = Number(qs.get('bpm')) || 76;
+const PARTICLES = 5400;
 
 /* ============================ CANVAS ============================ */
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 let W = 0, H = 0, DPR = 1, S = 10, CX = 0, CY = 0;
 
-/* ============================ HÌNH DẠNG TRÁI TIM ============================ */
+/* ============================ HÌNH DẠNG TRÁI TIM ============================
+   Đường cong ẩn (x²+y²-1)³ = x²y³ : hai thùy tròn đầy, đỉnh khía & mũi tim sắc nét */
 const N_TAB = 1440;
 const TAB = [];
 let HEART_H = 30;
@@ -99,6 +76,55 @@ function resize() {
   CX = W / 2; CY = H * 0.5;
 }
 resize();
+
+/* ============================ LOGO BÁCH KHOA TRONG TIM ============================
+   Tự động lọc bỏ phần nền trắng ngoài viền lục giác của ảnh logo-bk.png,
+   giữ nguyên màu trắng của hình lục giác ở giữa ("BK TP.HCM") để hiển thị
+   sắc nét, nổi bật và đập đồng điệu ngay trong lòng trái tim. */
+let logoCanvas = null;
+const rawLogo = new Image();
+rawLogo.src = 'logo-bk.png';
+rawLogo.onload = () => {
+  const w = rawLogo.naturalWidth, h = rawLogo.naturalHeight;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.drawImage(rawLogo, 0, 0);
+  try {
+    const img = g.getImageData(0, 0, w, h);
+    const d = img.data;
+    const vis = new Uint8Array(w * h);
+    const q = [];
+    const isOuterWhite = idx => d[idx] > 235 && d[idx + 1] > 235 && d[idx + 2] > 235;
+    const push = (x, y) => {
+      if (x < 0 || x >= w || y < 0 || y >= h) return;
+      const p = y * w + x;
+      if (vis[p]) return;
+      if (isOuterWhite(p * 4)) { vis[p] = 1; q.push(p); }
+    };
+    for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+    for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+    while (q.length) {
+      const p = q.pop();
+      const x = p % w, y = (p / w) | 0;
+      d[p * 4 + 3] = 0;
+      push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1);
+    }
+    // Khử răng cưa nhẹ ở rìa ngoài logo
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const p = y * w + x;
+        if (!vis[p] && (vis[p - 1] || vis[p + 1] || vis[p - w] || vis[p + w])) {
+          const idx = p * 4;
+          const br = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+          if (br > 210) d[idx + 3] = Math.round(d[idx + 3] * (255 - br) / 45);
+        }
+      }
+    }
+    g.putImageData(img, 0, 0);
+  } catch (e) {}
+  logoCanvas = c;
+};
 
 /* ============================ SPRITES (HỒNG & ĐỎ TƯƠI SÁNG, NỔI BẬT) ============================ */
 const PALETTE = [
@@ -200,115 +226,41 @@ function bokehSprite() {
 }
 const BOKEH = bokehSprite();
 
-/* ============================ TỌA ĐỘ HẠT CHỮ ============================
-   Vẽ chữ "system overloaded by .... YOU" ra canvas phụ rồi lấy mẫu các điểm
-   sáng để gán đích đến cho từng hạt. Tự chia 1 hoặc 2 dòng tùy độ rộng màn hình. */
-let textPoints = [];
-function buildTextPoints() {
-  const off = document.createElement('canvas');
-  off.width = W; off.height = H;
-  const g = off.getContext('2d');
-  g.fillStyle = '#fff';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-
-  const fam = '"Quicksand", "Segoe UI", system-ui, -apple-system, sans-serif';
-  if (W < 760) {
-    // Màn hình hẹp / điện thoại: chia 2 dòng cho chữ to, rõ nét
-    let fs1 = Math.min(Math.floor(W * 0.082), 44);
-    g.font = `800 ${fs1}px ${fam}`;
-    while (g.measureText('system overloaded').width > W * 0.9 && fs1 > 16) {
-      fs1 -= 2; g.font = `800 ${fs1}px ${fam}`;
-    }
-    const fs2 = Math.min(Math.floor(fs1 * 1.22), Math.floor(W * 0.105));
-    const gap = fs1 * 0.85;
-    g.font = `800 ${fs1}px ${fam}`;
-    g.fillText('system overloaded', W / 2, H / 2 - gap);
-    g.font = `900 ${fs2}px ${fam}`;
-    g.fillText('by .... YOU', W / 2, H / 2 + gap);
-  } else {
-    // Màn hình rộng: 1 dòng
-    const line = 'system overloaded by .... YOU';
-    let fs = Math.min(Math.floor(W * 0.056), 74);
-    g.font = `800 ${fs}px ${fam}`;
-    while (g.measureText(line).width > W * 0.88 && fs > 20) {
-      fs -= 2; g.font = `800 ${fs}px ${fam}`;
-    }
-    g.fillText(line, W / 2, H / 2);
-  }
-
-  const data = g.getImageData(0, 0, W, H).data;
-  const pts = [];
-  const step = W < 600 ? 2 : 3;
-  for (let y = 0; y < H; y += step) {
-    for (let x = 0; x < W; x += step) {
-      const a = data[(y * W + x) * 4 + 3];
-      if (a > 110) {
-        pts.push({
-          x: x + (Math.random() - 0.5) * step * 0.7,
-          y: y + (Math.random() - 0.5) * step * 0.7
-        });
-      }
-    }
-  }
-  // Xáo trộn để các hạt phân bổ đều khắp dòng chữ
-  for (let i = pts.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    const tmp = pts[i]; pts[i] = pts[j]; pts[j] = tmp;
-  }
-  textPoints = pts;
-}
-
-/* ============================ HẠT TRÁI TIM & CHỮ ============================ */
+/* ============================ HẠT TRÁI TIM ============================ */
 const parts = [];
-function assignTextTargets() {
-  buildTextPoints();
-  const m = textPoints.length;
-  for (let i = 0; i < parts.length; i++) {
-    const p = parts[i];
-    if (m > 0 && i < Math.floor(parts.length * 0.86)) {
-      const pt = textPoints[i % m];
-      p.ttx = pt.x;
-      p.tty = pt.y;
-      p.inText = true;
-    } else {
-      // Khoảng 14% hạt bay lơ lửng ngoài nền làm bụi sao lung linh quanh chữ
-      p.ttx = Math.random() * W;
-      p.tty = Math.random() * H;
-      p.inText = false;
-    }
-  }
-}
-
 function buildParticles() {
   parts.length = 0;
-  const n = W < 600 ? Math.round(PARTICLES * 0.65) : PARTICLES;
+  const n = W < 600 ? Math.round(PARTICLES * 0.6) : PARTICLES;
   const far = Math.max(W, H);
   const pick = a => a[(Math.random() * a.length) | 0];
   for (let i = 0; i < n; i++) {
     const t = Math.random() * Math.PI * 2;
     const [hx, hy] = heartXY(t);
-    const edge = Math.random() < 0.34;
-    const r = edge ? 1 - Math.pow(Math.random(), 5) * 0.025 : Math.sqrt(Math.random()) * 0.97;
+    const edge = Math.random() < 0.35;
+    // Chừa một khoảng dịu nhẹ ở đúng tâm để logo Bách Khoa trong tim nổi bật, không bị hạt che khuất
+    let r;
+    if (edge) {
+      r = 1 - Math.pow(Math.random(), 5) * 0.025;
+    } else {
+      const u = Math.random();
+      r = u < 0.12 ? Math.sqrt(Math.random()) * 0.32 : 0.28 + Math.sqrt(Math.random()) * 0.69;
+    }
     const star = !edge && Math.random() < 0.16 || edge && Math.random() < 0.05;
     const ang = Math.random() * Math.PI * 2, dist = far * (0.6 + Math.random() * 0.6);
     const ci = star ? (Math.random() * PALETTE.length) | 0
-      : r < 0.45 ? pick([7, 2, 4, 5, 1]) : r < 0.8 ? pick([4, 1, 5, 6, 2, 8]) : pick([0, 3, 5, 6, 8, 1]);
+      : r < 0.48 ? pick([7, 2, 4, 5, 1]) : r < 0.8 ? pick([4, 1, 5, 6, 2, 8]) : pick([0, 3, 5, 6, 8, 1]);
     parts.push({
       tx: hx * r, ty: hy * r, r,
-      ttx: CX, tty: CY, inText: true,
       x: CX + Math.cos(ang) * dist, y: CY + Math.sin(ang) * dist,
       vx: 0, vy: 0,
       size: star ? 7.5 + Math.random() * 11 : (edge ? 1.95 : 1.55) + Math.random() * 2.45,
       star, ci,
       phase: Math.random() * 6.28, speed: star ? 1.2 + Math.random() * 2.6 : 1.5 + Math.random() * 3.5,
-      base: star ? 0.68 + Math.random() * 0.24 : edge ? 0.86 : 0.48 + Math.random() * 0.36,
-      delay: Math.random() * 0.45,
-      textDelay: Math.random() * 0.25,
+      base: star ? 0.68 + Math.random() * 0.24 : edge ? 0.88 : 0.48 + Math.random() * 0.36,
+      delay: Math.random() * 1.2,
       fx: Math.random() * 6.28, fy: Math.random() * 6.28
     });
   }
-  assignTextTargets();
 }
 buildParticles();
 
@@ -349,7 +301,7 @@ for (let i = 0; i < 14; i++) bokeh.push({
 const floaters = [];
 function spawnFloaters(k) {
   for (let i = 0; i < k; i++) {
-    const [hx, hy] = heartXY(Math.random() * Math.PI * 2), r = 0.2 + Math.random() * 0.75;
+    const [hx, hy] = heartXY(Math.random() * Math.PI * 2), r = 0.25 + Math.random() * 0.7;
     floaters.push({
       x: CX + hx * r * S, y: CY + hy * r * S, vx: (Math.random() - 0.5) * 22, vy: -(35 + Math.random() * 50),
       size: 8 + Math.random() * 12, life: 0, max: 2.2 + Math.random() * 1.6, ph: Math.random() * 6.28,
@@ -359,13 +311,9 @@ function spawnFloaters(k) {
 }
 let shoot = null, nextShoot = 3;
 
-/* ============================ NHỊP TIM & TRẠNG THÁI ============================ */
+/* ============================ NHỊP TIM ============================ */
 const DUB = 0.24;
 let beatPhase = 0, prevP = 0, time = 0;
-let exploded = false;
-let flashAlpha = 0;
-const shockwaves = [];
-
 function circ(p, c, w) {
   let d = Math.abs(p - c); d = Math.min(d, 1 - d);
   return Math.exp(-(d / w) * (d / w));
@@ -376,8 +324,6 @@ const frac = x => ((x % 1) + 1) % 1;
 /* ============================ ÂM THANH ============================ */
 let audio = null, soundOn = false;
 const soundBtn = document.getElementById('sound');
-const replayBtn = document.getElementById('replay');
-
 function thump(vol, freq) {
   if (!audio) return;
   const t = audio.currentTime;
@@ -391,22 +337,6 @@ function thump(vol, freq) {
   o.connect(g).connect(audio.destination);
   o.start(t); o.stop(t + 0.22);
 }
-
-function boomSound() {
-  if (!audio || !soundOn) return;
-  const t = audio.currentTime;
-  // tiếng nổ trầm + lấp lánh
-  const o = audio.createOscillator(), g = audio.createGain();
-  o.type = 'triangle';
-  o.frequency.setValueAtTime(160, t);
-  o.frequency.exponentialRampToValueAtTime(28, t + 0.65);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(1.0, t + 0.02);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
-  o.connect(g).connect(audio.destination);
-  o.start(t); o.stop(t + 0.72);
-}
-
 soundBtn.addEventListener('click', e => {
   e.stopPropagation();
   if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
@@ -414,40 +344,6 @@ soundBtn.addEventListener('click', e => {
   soundOn = !soundOn;
   soundBtn.textContent = soundOn ? '🔊' : '🔇';
 });
-
-function restartSequence() {
-  time = 0; beatPhase = 0; prevP = 0;
-  exploded = false; flashAlpha = 0;
-  rings.length = 0; shockwaves.length = 0;
-  replayBtn.style.display = 'none';
-  buildParticles();
-}
-replayBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  restartSequence();
-});
-
-/* ============================ NỔ TUNG (EXPLODE) ============================ */
-function triggerExplosion() {
-  exploded = true;
-  flashAlpha = 0.42;
-  shockwaves.push({ r: S * 2, maxR: Math.max(W, H) * 0.85, a: 0.65, w: 3.2 });
-  shockwaves.push({ r: S * 0.5, maxR: Math.max(W, H) * 0.6, a: 0.45, w: 1.8 });
-  boomSound();
-
-  const maxSpd = Math.hypot(W, H) * 0.68;
-  const pick = a => a[(Math.random() * a.length) | 0];
-  for (const q of parts) {
-    const dx = q.x - CX, dy = q.y - CY;
-    const baseAng = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.55;
-    // nổ văng mạnh ra khắp màn hình với nhiều lớp tốc độ
-    const spd = (0.2 + Math.pow(Math.random(), 0.75) * 0.85) * maxSpd;
-    q.vx = Math.cos(baseAng) * spd + (Math.random() - 0.5) * 140;
-    q.vy = Math.sin(baseAng) * spd + (Math.random() - 0.5) * 140;
-    // điểm tô thêm sắc đỏ tươi & hồng khi nổ
-    if (Math.random() < 0.38) q.ci = pick([0, 3, 5, 6, 8]);
-  }
-}
 
 /* ============================ TƯƠNG TÁC ============================ */
 const rings = [];
@@ -478,8 +374,8 @@ window.addEventListener('pointerleave', () => { mouse.active = false; mouse.x = 
 window.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') { mouse.active = false; mouse.x = mouse.y = -9999; } });
 canvas.addEventListener('pointerdown', e => {
   pointer(e);
-  burst(e.clientX, e.clientY, 220, 480);
-  if (!exploded) rings.push({ r: 0, a: 0.45 });
+  burst(e.clientX, e.clientY, 240, 500);
+  rings.push({ r: 0, a: 0.55 });
   if (soundOn) thump(0.7, 90);
 });
 
@@ -487,48 +383,19 @@ canvas.addEventListener('pointerdown', e => {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.033, (now - last) / 1000); last = now; time += dt;
-
-  // Khi đang dồn nén (T_CHARGE_START -> T_EXPLODE), nhịp tim tăng tốc dần
-  let curBpm = BPM;
-  let charge = 0;
-  if (time >= T_CHARGE_START && time < T_EXPLODE) {
-    charge = (time - T_CHARGE_START) / (T_EXPLODE - T_CHARGE_START);
-    curBpm = BPM * (1 + charge * 1.15);
-  }
-  beatPhase += dt * curBpm / 60;
+  beatPhase += dt * BPM / 60;
   const p = frac(beatPhase);
 
-  if (!exploded) {
-    if (p < prevP) {
-      rings.push({ r: 0, a: 0.45 + charge * 0.2 });
-      spawnFloaters(3);
-      if (soundOn) thump(0.9, 110 + charge * 35);
-    }
-    if (prevP < DUB && p >= DUB && soundOn) thump(0.55, 85 + charge * 25);
+  if (p < prevP) {
+    rings.push({ r: 0, a: 0.55 });
+    spawnFloaters(3);
+    if (soundOn) thump(0.9, 110);
   }
+  if (prevP < DUB && p >= DUB && soundOn) thump(0.55, 85);
   prevP = p;
 
-  if (time >= T_EXPLODE && !exploded) {
-    triggerExplosion();
-  }
-  if (time >= 5.0 && replayBtn.style.display === 'none') {
-    replayBtn.style.display = 'block';
-  }
-
-  // Độ phồng và rung lắc khi dồn nén nhịp cuối
-  const pulse = exploded ? 0 : pulseAt(p);
-  let heartScale = 1 + 0.1 * pulse;
-  let shakeX = 0, shakeY = 0;
-  if (time >= T_CHARGE_START && time < T_EXPLODE) {
-    const ease = charge * charge;
-    // Phồng to lên tới ~1.36x kèm rung lắc tần số cao
-    heartScale = 1 + ease * 0.35 + 0.08 * pulse * (1 - charge * 0.4) + Math.sin(time * 60) * 0.025 * ease;
-    const amp = Math.pow(charge, 1.55) * 15;
-    shakeX = (Math.sin(time * 82) * 0.65 + (Math.random() - 0.5) * 0.7) * amp;
-    shakeY = (Math.cos(time * 90) * 0.65 + (Math.random() - 0.5) * 0.7) * amp;
-  }
-
-  const hCX = CX + shakeX, hCY = CY + shakeY;
+  const pulse = pulseAt(p);
+  const heartScale = 1 + 0.1 * pulse;
 
   ctx.clearRect(0, 0, W, H);
 
@@ -537,15 +404,13 @@ function frame(now) {
   for (const b of bokeh) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     if (b.y < -b.size) { b.y = H + b.size; b.x = Math.random() * W; }
-    ctx.globalAlpha = b.a * (0.6 + 0.4 * Math.sin(time * 0.7 + b.ph)) * Math.min(1, time / 1.0);
+    ctx.globalAlpha = b.a * (0.6 + 0.4 * Math.sin(time * 0.7 + b.ph)) * Math.min(1, time / 1.2);
     ctx.drawImage(BOKEH, b.x - b.size / 2, b.y - b.size / 2, b.size, b.size);
   }
 
-  // Quầng sáng mờ sau trái tim / sau dòng chữ
-  const gr = ctx.createRadialGradient(hCX, hCY, 0, hCX, hCY, S * 25);
-  const ga = exploded
-    ? 0.06 + 0.025 * Math.sin(time * 2)
-    : 0.055 + 0.095 * pulse + charge * 0.12;
+  // Quầng sáng hồng sau trái tim đập theo nhịp
+  const gr = ctx.createRadialGradient(CX, CY, 0, CX, CY, S * 25);
+  const ga = 0.06 + 0.12 * pulse;
   gr.addColorStop(0, `rgba(255,50,120,${ga})`);
   gr.addColorStop(0.55, `rgba(235,30,100,${ga * 0.32})`);
   gr.addColorStop(1, 'rgba(200,20,80,0)');
@@ -553,19 +418,16 @@ function frame(now) {
   ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
 
   // Ánh sáng hồng bên trong tim
-  if (!exploded) {
-    ctx.save();
-    heartPath(hCX, hCY, S * heartScale);
-    ctx.clip();
-    const ig = ctx.createRadialGradient(hCX, hCY - S * 1.5, 0, hCX, hCY, S * 17 * heartScale);
-    const ia = Math.min(1, Math.max(0, time - 0.4) / 0.8);
-    const boost = 1 + charge * 1.1;
-    ig.addColorStop(0, `rgba(255,135,190,${Math.min(0.26, (0.075 + 0.075 * pulse) * ia * boost)})`);
-    ig.addColorStop(0.45, `rgba(245,70,145,${Math.min(0.18, (0.045 + 0.045 * pulse) * ia * boost)})`);
-    ig.addColorStop(1, `rgba(215,30,95,${Math.min(0.1, (0.022 + 0.022 * pulse) * ia * boost)})`);
-    ctx.fillStyle = ig; ctx.fillRect(0, 0, W, H);
-    ctx.restore();
-  }
+  ctx.save();
+  heartPath(CX, CY, S * heartScale);
+  ctx.clip();
+  const ig = ctx.createRadialGradient(CX, CY - S * 1.2, 0, CX, CY, S * 17 * heartScale);
+  const ia = Math.min(1, Math.max(0, time - 0.6) / 1.2);
+  ig.addColorStop(0, `rgba(255,140,195,${(0.11 + 0.1 * pulse) * ia})`);
+  ig.addColorStop(0.45, `rgba(245,75,150,${(0.065 + 0.06 * pulse) * ia})`);
+  ig.addColorStop(1, `rgba(215,30,95,${(0.03 + 0.03 * pulse) * ia})`);
+  ctx.fillStyle = ig; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
 
   // Cánh hoa hồng rơi
   ctx.globalCompositeOperation = 'source-over';
@@ -573,156 +435,120 @@ function frame(now) {
     pt.y += pt.vy * dt; pt.x += Math.sin(time * 0.9 + pt.sway) * pt.swayAmp * dt;
     pt.rot += pt.vr * dt; pt.flip += dt * 2.2;
     if (pt.y > H + 40) Object.assign(pt, newPetal(false));
-    ctx.globalAlpha = pt.a * Math.min(1, time / 1.0);
+    ctx.globalAlpha = pt.a * Math.min(1, time / 1.2);
     ctx.save();
     ctx.translate(pt.x, pt.y); ctx.rotate(pt.rot);
     ctx.scale(Math.cos(pt.flip) * 0.8 + 0.2 * Math.sign(Math.cos(pt.flip) || 1), 1);
     ctx.drawImage(pt.s, -pt.size * 0.35, -pt.size * 0.5, pt.size * 0.7, pt.size);
     ctx.restore();
   }
+
+  // Vẽ Logo Bách Khoa ở tâm trái tim (đập đồng nhịp với trái tim)
+  const logoReady = logoCanvas || (rawLogo.complete && rawLogo.naturalWidth > 0 ? rawLogo : null);
+  if (logoReady) {
+    const logoAlpha = Math.min(1, Math.max(0, (time - 0.8) / 1.2));
+    if (logoAlpha > 0) {
+      const logoPl = pulseAt(frac(p - 0.02));
+      const logoScale = 1 + 0.115 * logoPl;
+      const lw = S * 7.4 * logoScale;
+      const lh = lw * (rawLogo.naturalHeight / rawLogo.naturalWidth);
+      const lx = CX;
+      const ly = CY - S * 0.6;
+
+      // Quầng sáng hồng phấn ôm quanh logo để hòa quyện với trái tim
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const lgr = ctx.createRadialGradient(lx, ly, lw * 0.1, lx, ly, lw * 0.95);
+      const lga = (0.22 + 0.25 * logoPl) * logoAlpha;
+      lgr.addColorStop(0, `rgba(255, 195, 225, ${lga})`);
+      lgr.addColorStop(0.55, `rgba(255, 95, 165, ${lga * 0.45})`);
+      lgr.addColorStop(1, 'rgba(255, 60, 140, 0)');
+      ctx.fillStyle = lgr;
+      ctx.beginPath();
+      ctx.arc(lx, ly, lw * 0.95, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Vẽ hình logo BK sắc nét kèm hào quang hồng nhẹ
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = logoAlpha * 0.96;
+      ctx.shadowColor = `rgba(255, 120, 185, ${0.65 + 0.35 * logoPl})`;
+      ctx.shadowBlur = 16 + 10 * logoPl;
+      ctx.drawImage(logoReady, lx - lw / 2, ly - lh / 2, lw, lh);
+      ctx.restore();
+    }
+  }
+
   ctx.globalCompositeOperation = 'lighter';
 
   // Hạt nền
   for (const a of ambient) {
     a.y -= a.vy * dt; a.x += Math.sin(time * 0.8 + a.sway) * 10 * dt;
     if (a.y < -30) Object.assign(a, newAmbient(false));
-    ctx.globalAlpha = (0.18 + 0.22 * Math.sin(time * 2 + a.ph)) * Math.min(1, time / 1.0);
+    ctx.globalAlpha = (0.18 + 0.22 * Math.sin(time * 2 + a.ph)) * Math.min(1, time / 1.2);
     const sp = a.heart ? HEARTS[a.ci] : STARS[a.ci];
     const sz = a.heart ? a.size * 0.8 : a.size * 1.45;
     ctx.drawImage(sp, a.x - sz / 2, a.y - sz / 2, sz, sz);
   }
 
-  // Vòng viền trái tim lan ra
+  // Vòng viền trái tim lan ra mỗi nhịp đập
   for (let i = rings.length - 1; i >= 0; i--) {
     const r = rings[i];
-    r.r += dt * (1.1 + charge * 0.7); r.a -= dt * 0.48;
+    r.r += dt * 0.95; r.a -= dt * 0.42;
     if (r.a <= 0) { rings.splice(i, 1); continue; }
     ctx.globalAlpha = r.a * 0.72;
     ctx.strokeStyle = '#ff6fa8'; ctx.lineWidth = 1.5;
     ctx.shadowColor = '#ff2e74'; ctx.shadowBlur = 10;
-    heartPath(hCX, hCY, S * (heartScale + r.r * 0.9));
+    heartPath(CX, CY, S * (1 + r.r * 0.9));
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
 
-  // Sóng xung kích tròn khi nổ tung
-  for (let i = shockwaves.length - 1; i >= 0; i--) {
-    const sw = shockwaves[i];
-    sw.r += (sw.maxR - sw.r) * 4.2 * dt + 220 * dt;
-    sw.a -= dt * 1.1;
-    if (sw.a <= 0) { shockwaves.splice(i, 1); continue; }
-    ctx.globalAlpha = sw.a;
-    ctx.strokeStyle = '#ff5c9e';
-    ctx.lineWidth = sw.w;
-    ctx.shadowColor = '#ff1e62'; ctx.shadowBlur = 14;
-    ctx.beginPath();
-    ctx.arc(CX, CY, sw.r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // Các hạt chính: Trái tim -> Nổ tung -> Tụ thành chữ (hoàn tất đúng 5s)
-  const R = 85, R2 = R * R, mx = mouse.x, my = mouse.y;
-  const inTextPhase = time >= T_TEXT_START;
-  const textElapsed = time - T_TEXT_START;
-
+  // Các hạt lấp lánh tạo thành trái tim đập liên tục
+  const R = 90, R2 = R * R, mx = mouse.x, my = mouse.y;
   for (let i = 0, n = parts.length; i < n; i++) {
     const q = parts[i];
     const age = time - q.delay;
     if (age < 0) continue;
 
-    let pl = 0;
-    if (!exploded) {
-      // Giai đoạn 1–3: Trái tim tụ nhanh, đập 2-3 nhịp & dồn nén phồng to + rung lắc
-      pl = pulseAt(frac(p - q.r * 0.1));
-      const sc = heartScale + 0.08 * pl * (1 - charge * 0.5);
-      const jitter = charge > 0 ? Math.pow(charge, 1.5) * 4.5 : 0;
-      const tx = hCX + q.tx * S * sc + Math.sin(time * 0.9 + q.fx) * 1.1 + (Math.random() - 0.5) * jitter;
-      const ty = hCY + q.ty * S * sc + Math.cos(time * 0.8 + q.fy) * 1.1 + (Math.random() - 0.5) * jitter;
+    const pl = pulseAt(frac(p - q.r * 0.1));
+    const sc = 1 + 0.105 * pl;
+    const tx = CX + q.tx * S * sc + Math.sin(time * 0.9 + q.fx) * 1.15;
+    const ty = CY + q.ty * S * sc + Math.cos(time * 0.8 + q.fy) * 1.15;
 
-      q.vx += (tx - q.x) * (62 + charge * 30) * dt;
-      q.vy += (ty - q.y) * (62 + charge * 30) * dt;
-      const damp = Math.exp(-8.0 * dt);
-      q.vx *= damp; q.vy *= damp;
-    } else if (!inTextPhase) {
-      // Giai đoạn 4 (3.2s -> 3.9s): Nổ tung và bay lơ lửng giữa không trung
-      const drag = Math.exp(-3.4 * dt);
-      q.vx *= drag; q.vy *= drag;
-      q.vx += Math.sin(time * 2.5 + q.fx) * 32 * dt;
-      q.vy += Math.cos(time * 2.3 + q.fy) * 32 * dt - 8 * dt;
-    } else {
-      // Giai đoạn 5 (3.9s -> 5.0s): Hút nhanh về xếp thành dòng chữ "system overloaded by .... YOU"
-      const tAge = textElapsed - q.textDelay;
-      if (tAge > 0) {
-        if (q.inText) {
-          const pull = Math.min(1, tAge / 0.75);
-          const k = (28 + 85 * pull * pull) * dt;
-          const sway = (1 - pull * 0.75) * 0.8;
-          const tx = q.ttx + Math.sin(time * 1.6 + q.fx) * sway;
-          const ty = q.tty + Math.cos(time * 1.5 + q.fy) * sway;
-          q.vx += (tx - q.x) * k;
-          q.vy += (ty - q.y) * k;
-          const damp = Math.exp(-(6.5 + pull * 5.0) * dt);
-          q.vx *= damp; q.vy *= damp;
-        } else {
-          // Hạt bụi sao bay lơ lửng quanh chữ
-          q.vx += Math.sin(time * 0.9 + q.fx) * 14 * dt;
-          q.vy += Math.cos(time * 0.8 + q.fy) * 14 * dt - 4 * dt;
-          q.vx *= Math.exp(-2.2 * dt);
-          q.vy *= Math.exp(-2.2 * dt);
-        }
-      } else {
-        q.vx *= Math.exp(-2.5 * dt);
-        q.vy *= Math.exp(-2.5 * dt);
-      }
-    }
+    q.vx += (tx - q.x) * 44 * dt;
+    q.vy += (ty - q.y) * 44 * dt;
 
     if (mouse.active) {
       const dx = q.x - mx, dy = q.y - my, d2 = dx * dx + dy * dy;
       if (d2 < R2 && d2 > 0.01) {
-        const d = Math.sqrt(d2), f = (1 - d / R) * 1200 * dt;
+        const d = Math.sqrt(d2), f = (1 - d / R) * 1300 * dt;
         q.vx += dx / d * f; q.vy += dy / d * f;
       }
     }
 
+    const damp = Math.exp(-6.8 * dt);
+    q.vx *= damp; q.vy *= damp;
     q.x += q.vx * dt; q.y += q.vy * dt;
 
-    // Độ sáng hồng tươi tắn, nổi bật rõ nét
+    // Giảm nhẹ độ chói của vài hạt bay ngang qua chính giữa tâm để logo luôn rõ nét
+    const centerFade = q.r < 0.27 ? 0.45 : 1;
     const tw = 0.5 + 0.5 * Math.sin(time * q.speed + q.phase);
-    const chargeBoost = !exploded ? charge * 0.25 : 0;
-    const textSettled = inTextPhase && q.inText ? Math.min(1, Math.max(0, (textElapsed - q.textDelay) / 0.8)) : 0;
-
     if (q.star) {
       const k = tw * tw;
-      let a = q.base * (0.4 + 0.5 * k) * (0.85 + 0.36 * pl + chargeBoost) * Math.min(1, age / 0.35);
-      if (inTextPhase && !q.inText) a *= 0.55;
+      let a = q.base * (0.4 + 0.5 * k) * (0.85 + 0.38 * pl) * Math.min(1, age / 0.5) * centerFade;
       if (a > 0.96) a = 0.96;
-      const scaleText = 1 - textSettled * 0.32;
-      const sz = q.size * (0.72 + 0.42 * k + 0.24 * pl) * 2.3 * scaleText;
+      const sz = q.size * (0.72 + 0.42 * k + 0.25 * pl) * 2.3;
       ctx.globalAlpha = a;
       ctx.drawImage(STARS[q.ci], q.x - sz / 2, q.y - sz / 2, sz, sz);
     } else {
-      let a = q.base * (0.4 + 0.48 * tw) * (0.8 + 0.38 * pl + chargeBoost) * Math.min(1, age / 0.35);
-      if (textSettled > 0) a = Math.min(0.96, a * (1 + textSettled * 0.45));
-      else if (inTextPhase && !q.inText) a *= 0.48;
+      let a = q.base * (0.4 + 0.48 * tw) * (0.8 + 0.4 * pl) * Math.min(1, age / 0.5) * centerFade;
       if (a > 0.96) a = 0.96;
-      const scaleText = 1 - textSettled * 0.18;
-      const sz = q.size * (1 + 0.28 * pl) * 2.18 * scaleText;
+      const sz = q.size * (1 + 0.28 * pl) * 2.18;
       ctx.globalAlpha = a;
       ctx.drawImage(GLOWS[q.ci], q.x - sz / 2, q.y - sz / 2, sz, sz);
     }
-  }
-
-  // Chớp sáng hồng dịu khoảnh khắc phát nổ
-  if (flashAlpha > 0.005) {
-    flashAlpha *= Math.exp(-7.5 * dt);
-    const fg = ctx.createRadialGradient(CX, CY, 0, CX, CY, Math.max(W, H) * 0.7);
-    fg.addColorStop(0, `rgba(245,130,175,${flashAlpha})`);
-    fg.addColorStop(0.35, `rgba(220,35,95,${flashAlpha * 0.55})`);
-    fg.addColorStop(1, 'rgba(190,15,60,0)');
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = fg;
-    ctx.fillRect(0, 0, W, H);
   }
 
   // Tim nhỏ bay lên
@@ -762,7 +588,9 @@ function frame(now) {
 
 window.addEventListener('resize', () => {
   resize();
-  assignTextTargets();
+  buildParticles();
+  time = Math.max(time, 2.5);
+  parts.forEach(p => p.delay = 0);
 });
 requestAnimationFrame(frame);
 </script>
